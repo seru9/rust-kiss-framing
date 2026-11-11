@@ -1,16 +1,20 @@
-use crate::constants::{MAX_DATA, FEND, TFEND, FESC, TFESC};
+use crate::constants::{FEND, FESC, MAX_DATA, TFEND, TFESC};
+use crate::types::{KissError, KissFrame};
 
-use crate::types::{KissError, KissEvent, KissFrame};
-
+/// Encodes a KISS frame into its wire format representation.
 pub fn encode(frame: &KissFrame) -> Result<Vec<u8>, KissError> {
     if frame.port > 15 {
         return Err(KissError::InvalidPort { port: frame.port });
     }
     if frame.command > 15 {
-        return Err(KissError::InvalidCommand { command: frame.command });
+        return Err(KissError::InvalidCommand {
+            command: frame.command,
+        });
     }
     if frame.data.len() > MAX_DATA {
-        return Err(KissError::DataTooLong { len: frame.data.len() });
+        return Err(KissError::DataTooLong {
+            len: frame.data.len(),
+        });
     }
 
     let mut encoded = Vec::with_capacity(2 + frame.data.len() * 2);
@@ -28,6 +32,7 @@ pub fn encode(frame: &KissFrame) -> Result<Vec<u8>, KissError> {
 
     Ok(encoded)
 }
+
 fn push_escaped(byte: u8, dest: &mut Vec<u8>) {
     match byte {
         FEND => {

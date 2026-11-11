@@ -1,14 +1,18 @@
+#![forbid(unsafe_code)]
+
+//! KISS framing and streaming reassembly library.
+
 mod constants;
-mod types;
-mod encoder;
 mod decoder;
+mod encoder;
+mod types;
 
 // Expose constants
-pub use constants::{FEND, FESC, TFEND, TFESC, MAX_DATA};
+pub use constants::{FEND, FESC, MAX_DATA, TFEND, TFESC};
 
 // Expose types and errors
-pub use types::{KissFrame, KissError, KissEvent};
+pub use types::{KissError, KissEvent, KissFrame};
 
 // Expose functions and decoder struct
-pub use encoder::{encode};
 pub use decoder::{KissDecoder, decode};
+pub use encoder::encode;
