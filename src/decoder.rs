@@ -36,75 +36,92 @@ impl KissDecoder {
         for &b in data {
             self.offset += 1;
             match self.state {
-                State::Hunting => {
-                    if b == FEND {
-                        self.state = State::Body;
-                        self.body.clear();
-                    }
-                }
-                State::Body => match b {
-                    FEND => {
-                        if !self.body.is_empty() {
-                            let port_cmd = self.body[0];
-                            let port = port_cmd >> 4;
-                            let command = port_cmd & 0x0F;
-                            let frame_data = self.body[1..].to_vec();
-                            events.push(KissEvent::Frame(KissFrame {
-                                port,
-                                command,
-                                data: frame_data,
-                            }));
-                            self.body.clear();
-                        }
-                    }
-                    FESC => {
-                        self.state = State::Escape;
-                    }
-                    other => {
-                        self.push_body_byte(other, &mut events);
-                    }
-                },
-                State::Escape => match b {
-                    TFEND => {
-                        self.push_body_byte(FEND, &mut events);
-                        if self.state != State::Discard {
-                            self.state = State::Body;
-                        }
-                    }
-                    TFESC => {
-                        self.push_body_byte(FESC, &mut events);
-                        if self.state != State::Discard {
-                            self.state = State::Body;
-                        }
-                    }
-                    FEND => {
-                        events.push(KissEvent::Error(KissError::InvalidEscape {
-                            byte: FEND,
-                            at: self.offset - 1,
-                        }));
-                        self.body.clear();
-                        self.state = State::Body;
-                    }
-                    other => {
-                        events.push(KissEvent::Error(KissError::InvalidEscape {
-                            byte: other,
-                            at: self.offset - 1,
-                        }));
-                        self.body.clear();
-                        self.state = State::Discard;
-                    }
-                },
-                State::Discard => {
-                    if b == FEND {
-                        self.state = State::Body;
-                        self.body.clear();
-                    }
-                }
+                State::Hunting => self.step_hunting(b),
+                State::Body => self.step_body(b, &mut events),
+                State::Escape => self.step_escape(b, &mut events),
+                State::Discard => self.step_discard(b),
             }
         }
         events
     }
 
+    /// Handles bytes when searching for the initial delimiter (startup noise).
+    fn step_hunting(&mut self, b: u8) {
+        if b == FEND {
+            self.state = State::Body;
+            self.body.clear();
+        }
+    }
+
+    /// Handles bytes during frame body assembly.
+    fn step_body(&mut self, b: u8, events: &mut Vec<KissEvent>) {
+        match b {
+            FEND => {
+                if !self.body.is_empty() {
+                    let port_cmd = self.body[0];
+                    let port = port_cmd >> 4;
+                    let command = port_cmd & 0x0F;
+                    let frame_data = self.body[1..].to_vec();
+                    events.push(KissEvent::Frame(KissFrame {
+                        port,
+                        command,
+                        data: frame_data,
+                    }));
+                    self.body.clear();
+                }
+            }
+            FESC => {
+                self.state = State::Escape;
+            }
+            other => {
+                self.push_body_byte(other, events);
+            }
+        }
+    }
+
+    /// Handles bytes following a FESC escape marker.
+    fn step_escape(&mut self, b: u8, events: &mut Vec<KissEvent>) {
+        match b {
+            TFEND => {
+                self.push_body_byte(FEND, events);
+                if self.state != State::Discard {
+                    self.state = State::Body;
+                }
+            }
+            TFESC => {
+                self.push_body_byte(FESC, events);
+                if self.state != State::Discard {
+                    self.state = State::Body;
+                }
+            }
+            FEND => {
+                events.push(KissEvent::Error(KissError::InvalidEscape {
+                    byte: FEND,
+                    at: self.offset - 1,
+                }));
+                self.body.clear();
+                self.state = State::Body;
+            }
+            other => {
+                events.push(KissEvent::Error(KissError::InvalidEscape {
+                    byte: other,
+                    at: self.offset - 1,
+                }));
+                self.body.clear();
+                self.state = State::Discard;
+            }
+        }
+    }
+
+    /// Handles bytes when discarding an invalid or oversized frame until the next delimiter.
+    fn step_discard(&mut self, b: u8) {
+        if b == FEND {
+            self.state = State::Body;
+            self.body.clear();
+        }
+    }
+
+    /// Appends a byte to the body buffer, enforcing the MAX_BODY size limit.
     fn push_body_byte(&mut self, byte: u8, events: &mut Vec<KissEvent>) {
         if self.body.len() >= MAX_BODY {
             events.push(KissEvent::Error(KissError::FrameTooLong {
@@ -121,19 +138,17 @@ impl KissDecoder {
     pub fn finish(&mut self) -> Vec<KissEvent> {
         let mut events: Vec<KissEvent> = Vec::new();
         match self.state {
-            State::Body => {
-                if !self.body.is_empty() {
-                    events.push(KissEvent::Error(KissError::TruncatedFrame {
-                        at: self.offset,
-                    }));
-                }
+            State::Body if !self.body.is_empty() => {
+                events.push(KissEvent::Error(KissError::TruncatedFrame {
+                    at: self.offset,
+                }));
             }
             State::Escape => {
                 events.push(KissEvent::Error(KissError::TruncatedFrame {
                     at: self.offset,
                 }));
             }
-            State::Hunting | State::Discard => {}
+            _ => {}
         }
         self.reset();
         events
