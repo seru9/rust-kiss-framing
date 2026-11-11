@@ -11,4 +11,4 @@ pub use types::{KissFrame, KissError, KissEvent};
 
 // Expose functions and decoder struct
 pub use encoder::{encode};
-pub use decoder::KissDecoder;
+pub use decoder::{KissDecoder, decode};
