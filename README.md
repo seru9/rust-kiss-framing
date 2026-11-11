@@ -1,20 +1,10 @@
-# r3-kiss
+# rust-kiss-framing
 
 Byte-level KISS framing and streaming reassembly in Rust, with **zero external
 dependencies** and no `unsafe` code.
 
 This crate is standalone: it does not parse AX.25, interpret the command value,
 or depend on any radio/TCP/PyO3 code. The data field is opaque bytes.
-
-## Status
-
-Scaffold / baseline architecture:
-
-- `Cargo.toml`, module layout, public API, error type and encoder are in place.
-- `encode` and `encode_into` are implemented and covered by tests.
-- `KissDecoder::push` / `KissDecoder::finish` are TODO. The state machine,
-  transitions and edge cases are documented in `src/decoder.rs`; decoder tests
-  are present but marked `#[ignore]` until the core is implemented.
 
 ## Wire format
 
@@ -142,11 +132,6 @@ The project targets Rust 1.97, edition 2024.
 
 | File | Purpose |
 |------|---------|
-| `tests/frame_vectors.rs` | encoding vectors and wire-shape invariants |
-| `tests/decoder_vectors.rs` | happy-path decoder vectors |
-| `tests/decoder_errors.rs` | invalid escape, oversized and truncated frames |
-| `tests/chunking.rs` | chunk-boundary invariance and split escapes |
-
-The reference fixture `fixtures/r3_vectors.json` is not included in this
-checkout. Copy the frozen fixture into `fixtures/` when it becomes available;
-do not edit it.
+| `tests/encoder_tests.rs` | Frame encoding, byte-stuffing/escaping (`FEND`, `FESC`), and validation errors (`InvalidPort`, `InvalidCommand`, `DataTooLong`) |
+| `tests/decoder_tests.rs` | One-shot frame decoding, chunked streaming reassembly, and escape error handling (`InvalidEscape`) |
+| `tests/integrations_tests.rs` | Full roundtrip encode-decode verification and byte-by-byte streaming chunk invariance |
